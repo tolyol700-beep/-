@@ -1,18 +1,17 @@
 import re
-import aiohttp
 from config import KEYWORDS
 import logging
 
 class ContentVerifier:
     def __init__(self):
-        self.min_length = 100
-        self.max_length = 2000
+        self.min_length = 50
+        self.max_length = 1000
         
     async def verify_source(self, url):
         """Проверка надежности источника"""
         trusted_domains = [
             'banki.ru', 'gibdd.ru', 'garant.ru', 'consultant.ru',
-            'drom.ru', 'akm.ru', 'raexpert.ru', 'insur-info.ru'
+            'drom.ru', 'akm.ru', 'insur-info.ru', 'fishki.net'
         ]
         
         return any(domain in url for domain in trusted_domains)
@@ -24,19 +23,24 @@ class ContentVerifier:
         
         # Считаем количество совпадений ключевых слов
         matches = sum(1 for keyword in keywords if keyword.lower() in text)
-        return matches >= 2  # Минимум 2 совпадения
+        return matches >= 1  # Минимум 1 совпадение
         
     def check_quality(self, content):
         """Проверка качества контента"""
         text = content['summary']
         
         # Проверка длины
-        if len(text) < self.min_length or len(text) > self.max_length:
+        if len(text) < self.min_length:
             return False
             
         # Проверка на спам
-        spam_indicators = ['казино', 'ставки', 'xxx', 'порно', 'viagra']
+        spam_indicators = ['казино', 'ставки', 'xxx', 'порно', 'viagra', 'гадание']
         if any(indicator in text.lower() for indicator in spam_indicators):
+            return False
+            
+        # Проверка на кириллицу (основной язык)
+        cyrillic_chars = len(re.findall('[а-яё]', text.lower()))
+        if cyrillic_chars < 10:  # Минимум 10 кириллических символов
             return False
             
         return True
