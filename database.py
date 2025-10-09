@@ -22,7 +22,7 @@ class Database:
                 )
             ''')
             
-    async def save_post(self, post_data):
+    async def save_post(self, post_data, content_type):
         """Сохранение опубликованного поста"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -34,7 +34,7 @@ class Database:
                     post_data['title'],
                     post_data['summary'],
                     post_data['source'],
-                    'auto'  # Можно определить тип из контекста
+                    content_type
                 ))
         except Exception as e:
             print(f"Ошибка сохранения в БД: {e}")
