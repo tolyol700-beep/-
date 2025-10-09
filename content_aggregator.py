@@ -3,61 +3,64 @@ import asyncio
 from bs4 import BeautifulSoup
 from config import SOURCES
 import logging
-import xml.etree.ElementTree as ET
-from urllib.parse import urlparse
+import re
 
 class ContentAggregator:
     async def fetch_rss(self, url):
-        """Парсинг RSS-лент без feedparser"""
+        """Парсинг RSS-лент с помощью BeautifulSoup"""
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
                         content = await response.text()
+                        soup = BeautifulSoup(content, 'html.parser')
                         
                         posts = []
-                        try:
-                            # Парсим XML напрямую
-                            root = ET.fromstring(content)
-                            
-                            # Ищем items (RSS 2.0) или entries (Atom)
-                            items = root.findall('.//item') or root.findall('.//entry')
-                            
-                            for item in items[:5]:  # Берем 5 последних
-                                title_elem = item.find('title') or item.find('{http://www.w3.org/2005/Atom}title')
-                                link_elem = item.find('link') or item.find('{http://www.w3.org/2005/Atom}link')
-                                description_elem = item.find('description') or item.find('{http://www.w3.org/2005/Atom}summary')
-                                pub_date_elem = item.find('pubDate') or item.find('{http://www.w3.org/2005/Atom}published')
+                        
+                        # Парсим RSS/Atom фиды
+                        items = soup.find_all('item')[:5] or soup.find_all('entry')[:5]
+                        
+                        for item in items:
+                            try:
+                                title_elem = item.find('title')
+                                link_elem = item.find('link')
+                                description_elem = item.find('description') or item.find('summary')
+                                pub_date_elem = item.find('pubdate') or item.find('published')
                                 
-                                if title_elem is not None:
+                                if title_elem:
+                                    title = title_elem.get_text().strip()
+                                    
+                                    # Получаем ссылку
+                                    if link_elem:
+                                        if link_elem.get('href'):
+                                            link = link_elem.get('href')
+                                        else:
+                                            link = link_elem.get_text().strip()
+                                    else:
+                                        link = url
+                                    
+                                    # Получаем описание
+                                    if description_elem:
+                                        description = description_elem.get_text().strip()[:300] + "..."
+                                    else:
+                                        description = title
+                                    
+                                    # Получаем дату публикации
+                                    pub_date = ""
+                                    if pub_date_elem:
+                                        pub_date = pub_date_elem.get_text().strip()
+                                    
                                     post = {
-                                        'title': title_elem.text or '',
-                                        'link': link_elem.text if link_elem is not None else (link_elem.get('href') if link_elem is not None else url),
-                                        'summary': description_elem.text[:300] + "..." if description_elem is not None and description_elem.text else title_elem.text or '',
-                                        'published': pub_date_elem.text if pub_date_elem is not None else '',
+                                        'title': title,
+                                        'link': link,
+                                        'summary': description,
+                                        'published': pub_date,
                                         'source': url
                                     }
                                     posts.append(post)
-                        except ET.ParseError:
-                            # Если XML не парсится, используем BeautifulSoup
-                            soup = BeautifulSoup(content, 'xml')
-                            items = soup.find_all('item')[:5]
-                            
-                            for item in items:
-                                title = item.find('title')
-                                link = item.find('link')
-                                description = item.find('description')
-                                pub_date = item.find('pubDate')
-                                
-                                if title:
-                                    post = {
-                                        'title': title.get_text(),
-                                        'link': link.get_text() if link else url,
-                                        'summary': description.get_text()[:300] + "..." if description else title.get_text(),
-                                        'published': pub_date.get_text() if pub_date else '',
-                                        'source': url
-                                    }
-                                    posts.append(post)
+                            except Exception as e:
+                                logging.error(f"Ошибка парсинга элемента RSS: {e}")
+                                continue
                         
                         return posts
                     else:
@@ -76,28 +79,36 @@ class ContentAggregator:
                         content = await response.text()
                         soup = BeautifulSoup(content, 'html.parser')
                         
-                        # Парсим заголовок и мета-описание
                         posts = []
-                        title = soup.find('title')
-                        meta_description = soup.find('meta', attrs={'name': 'description'})
                         
+                        # Убираем скрипты и стили
+                        for script in soup(["script", "style"]):
+                            script.decompose()
+                        
+                        # Получаем заголовок
+                        title = soup.find('title')
                         if title:
-                            description = ""
-                            if meta_description:
-                                description = meta_description.get('content', '')[:200]
-                            
-                            # Ищем основной контент
-                            article = soup.find('article') or soup.find('div', class_=lambda x: x and ('content' in x or 'article' in x))
-                            if article:
-                                description = article.get_text()[:200].strip()
-                            
-                            post = {
-                                'title': title.get_text().strip(),
-                                'link': url,
-                                'summary': description or "Читайте полную статью по ссылке",
-                                'source': url
-                            }
-                            posts.append(post)
+                            title_text = title.get_text().strip()
+                        else:
+                            title_text = "Без заголовка"
+                        
+                        # Получаем основной контент
+                        article = (soup.find('article') or 
+                                  soup.find('div', class_=re.compile('content|article|post')) or
+                                  soup.find('main') or
+                                  soup)
+                        
+                        # Берем первые 200 символов текста
+                        text_content = article.get_text().strip()
+                        summary = ' '.join(text_content.split()[:30]) + "..."
+                        
+                        post = {
+                            'title': title_text,
+                            'link': url,
+                            'summary': summary,
+                            'source': url
+                        }
+                        posts.append(post)
                         return posts
                     else:
                         return []
@@ -110,22 +121,18 @@ class ContentAggregator:
         sources = SOURCES.get(content_type, [])
         all_posts = []
         
-        tasks = []
         for source in sources:
-            if source.endswith('.rss') or source.endswith('.xml'):
-                task = self.fetch_rss(source)
-            else:
-                task = self.fetch_web_content(source)
-            tasks.append(task)
-        
-        # Запускаем все задачи параллельно
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in results:
-            if isinstance(result, Exception):
-                logging.error(f"Ошибка при сборе контента: {result}")
-                continue
-            all_posts.extend(result)
+            try:
+                if source.endswith('.rss') or source.endswith('.xml') or 'rss' in source:
+                    posts = await self.fetch_rss(source)
+                else:
+                    posts = await self.fetch_web_content(source)
+                    
+                all_posts.extend(posts)
+                logging.info(f"📰 Из {source} получено {len(posts)} постов")
                 
-        logging.info(f"📥 Для {content_type} собрано {len(all_posts)} постов")
+            except Exception as e:
+                logging.error(f"Ошибка при обработке источника {source}: {e}")
+                continue
+                
         return all_posts
