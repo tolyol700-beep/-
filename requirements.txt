@@ -2,5 +2,3 @@ aiohttp==3.9.0
 beautifulsoup4==4.12.2
 python-telegram-bot==20.7
 apscheduler==3.10.4
-requests==2.31.0
-lxml==4.9.3
