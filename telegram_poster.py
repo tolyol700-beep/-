@@ -53,8 +53,8 @@ class TelegramPoster:
             'consultant.ru': 'КонсультантПлюс',
             'drom.ru': 'Drom.ru',
             'akm.ru': 'АК&M',
-            'raexpert.ru': 'РАЭКС',
-            'insur-info.ru': 'Инсур-Инфо'
+            'insur-info.ru': 'Инсур-Инфо',
+            'fishki.net': 'Фишки'
         }
         
         for domain, name in domain_map.items():
@@ -64,7 +64,7 @@ class TelegramPoster:
         
     def get_source_tag(self, source_url):
         """Генерация тега для источника"""
-        for domain in ['banki', 'gibdd', 'garant', 'consultant', 'drom']:
+        for domain in ['banki', 'gibdd', 'garant', 'consultant', 'drom', 'fishki']:
             if domain in source_url:
                 return domain
         return 'autonews'
