@@ -101,7 +101,7 @@ class AutoInsiderAgent:
         
         # Тестовая публикация при запуске
         logging.info("🧪 Тестовый запуск...")
-        await self.collect_and_post_insurance()
+        await self.collect_and_post("insurance")
         
         logging.info("⏰ Агент запущен. Ожидание расписания...")
         
